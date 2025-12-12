@@ -1,101 +1,110 @@
-# 🗺️ Roadmap e Guia de Implementação do Pipex (42)
+# 🗺️ PIPEX ROADMAP E GUIA DE IMPLEMENTAÇÃO
 
-Este documento serve como um mapa de referência e um checklist passo a passo para a implementação do projeto Pipex, replicando a funcionalidade `infile cmd1 | cmd2 outfile`.
+Este guia detalhado serve como o mapa oficial para o desenvolvimento do projeto **Pipex**, replicando o mecanismo UNIX de *pipes* e redirecionamento de I/O, conforme a sintaxe: `infile cmd1 | cmd2 outfile`.
 
 ## I. Visão Geral Conceitual
 
-O Pipex se baseia na comunicação Interprocessos (IPC) usando pipes.
+O Pipex utiliza a Comunicação Interprocessos (IPC) via `pipe()` para ligar a saída padrão de um comando à entrada padrão do próximo. 
 
 | Componente | Função no Pipex | Chamadas de Sistema Chave |
 | :--- | :--- | :--- |
-| **Processo Pai** | Gerente. Cria o pipe e os processos filhos. Aguarda a conclusão. | `pipe()`, `fork()`, `waitpid()`, `close()` |
-| **Filho 1 (`cmd1`)** | Trabalhador de Escrita. Lê do `infile` e **escreve no pipe**. | `dup2()`, `execve()` |
-| **Filho 2 (`cmd2`)** | Trabalhador de Leitura. **Lê do pipe** e escreve no `outfile`. | `dup2()`, `execve()` |
+| **Processo Pai** | Gerente e Orquestrador. | [cite_start]`pipe()`, `fork()`, `waitpid()`, `close()` [cite: 89] |
+| **Filho 1 (`cmd1`)** | Lê do `infile` e **escreve** no pipe. | [cite_start]`dup2()`, `execve()` [cite: 89] |
+| **Filho 2 (`cmd2`)** | **Lê** do pipe e escreve no `outfile`. | [cite_start]`dup2()`, `execve()` [cite: 89] |
+
+---
 
 ## II. Fluxograma Lógico (Estrutura de Controle)
 
-A tabela abaixo descreve a sequência de eventos e a responsabilidade de cada processo.
+O fluxo de controle do programa é dividido em quatro fases, garantindo o correto encadeamento dos processos.
 
-### 1. Início e Setup (Processo Pai)
+### 1. 🎯 Fase de Setup (Processo Pai)
 
 | Símbolo | Ação | Notas Conceituais |
 | :---: | :--- | :--- |
-| **Início** | Validação de argumentos e *parsing* | Extrair `infile`, `outfile` e comandos. |
+| **Início** | Validação de argumentos e *parsing* | [cite_start]Confirma 4 argumentos: `file1 cmd1 cmd2 file2`[cite: 92]. |
 | **Processo** | `pipe(fd[2])` | **Cria o canal**: FDs de Leitura (`fd[0]`) e Escrita (`fd[1]`). |
 
-### 2. Caminho do Primeiro Comando (`cmd1`)
+### 2. 👶 Caminho do Primeiro Comando (`cmd1`)
 
-*(Executado no Processo **Filho 1**)*
+*(Executado no Processo **Filho 1** após o primeiro `fork()`)*
 
 | Símbolo | Ação | Foco do Processo |
 | :---: | :--- | :--- |
 | **Decisão** | `pid1 = fork()` | Cria o processo Filho 1. |
-| **Redirecionamento** | `open("infile", ...)` | Abre o arquivo de entrada. |
 | **Redirecionamento** | `dup2(infile_fd, 0 - stdin)` | **ENTRADA:** `cmd1` lê de `infile`. |
 | **Redirecionamento** | `dup2(fd[1], 1 - stdout)` | **SAÍDA (PIPE):** `cmd1` escreve no canal. |
-| **Limpeza** | `close(fd[0])` e `close(fd[1])` | **Crucial:** Fecha as cópias não utilizadas do pipe. |
+| **Limpeza** | `close(fd[0])` e `close(fd[1])` | **Crucial:** Fecha as cópias não utilizadas do pipe para evitar bloqueios. |
 | **Execução** | `execve(cmd1, ...)` | Substitui o código. |
-| **Fim** | *(Processo termina)* | A saída está agora no pipe, pronta para `cmd2`. |
 
-### 3. Caminho do Segundo Comando (`cmd2`)
+### 3. 🧑 Caminho do Segundo Comando (`cmd2`)
 
-*(Executado no Processo **Filho 2**)*
+*(Executado no Processo **Filho 2** após o segundo `fork()`)*
 
 | Símbolo | Ação | Foco do Processo |
 | :---: | :--- | :--- |
-| **Decisão** | `pid2 = fork()` | Cria o processo Filho 2 (no Pai). |
-| **Redirecionamento** | `open("outfile", ...)` | Abre/Cria o arquivo de saída. |
+| **Decisão** | `pid2 = fork()` | Cria o processo Filho 2. |
 | **Redirecionamento** | `dup2(fd[0], 0 - stdin)` | **ENTRADA (PIPE):** `cmd2` lê do canal. |
 | **Redirecionamento** | `dup2(outfile_fd, 1 - stdout)` | **SAÍDA:** `cmd2` escreve no `outfile`. |
 | **Limpeza** | `close(fd[0])` e `close(fd[1])` | **Crucial:** Fecha as cópias não utilizadas do pipe. |
 | **Execução** | `execve(cmd2, ...)` | Substitui o código. |
-| **Fim** | *(Processo termina)* | A execução está concluída. |
 
-### 4. Conclusão e Espera (Processo Pai)
+### 4. 🏁 Conclusão e Espera (Processo Pai)
 
 | Símbolo | Ação | Notas Conceituais |
 | :---: | :--- | :--- |
-| **Limpeza Final** | `close(fd[0])` e `close(fd[1])` | **Fecha as cópias ORIGINAIS** do pipe que o Pai possui. |
-| **Espera** | `waitpid(pid1, ...)` | Aguarda o término do Filho 1. |
-| **Espera** | `waitpid(pid2, ...)` | Aguarda o término do Filho 2. |
+| **Limpeza Final** | `close(fd[0])` e `close(fd[1])` | **Fecha as cópias ORIGINAIS** do pipe do Pai. |
+| **Espera** | `waitpid(pid1, ...)` e `waitpid(pid2, ...)` | Aguarda o término de **ambos** os processos filhos. |
 | **Fim** | Retorna o código de saída | Retorna o status do último comando (`cmd2`). |
 
-## III. 📝 Checklist de Implementação
+---
 
-Use este checklist para garantir que todos os passos, especialmente as chamadas de *file descriptors*, foram implementados corretamente.
+## III. 📝 Checklist de Implementação (Ações Críticas)
 
-### 🎯 Fase 1: Inicialização e Preparação
+Utilize este checklist para garantir a integridade do I/O e a correta manipulação dos FDs.
 
-| Status | Tarefa | Detalhe Crucial |
-| :---: | :--- | :--- |
-| ☐ | Validação e *Parsing* | Confirme o número de argumentos. |
-| ☐ | Criação do Pipe | Chame `pipe(fd[2])` **apenas uma vez** no processo Pai. |
-| ☐ | Busca do `PATH` | Funções de busca de comando (`find_path`) prontas. |
+| Fase | Status | Tarefa | Detalhe Crucial |
+| :---: | :---: | :--- | :--- |
+| **Setup** | ☐ | Criação do Pipe | `pipe(fd[2])` **apenas uma vez** no Pai. |
+| **Setup** | ☐ | Busca do `PATH` | Achar o caminho completo do executável (`find_path`). |
+| **CMD 1** | ☐ | Redirecionar Entrada | `dup2(infile_fd, STDIN_FILENO)`. |
+| **CMD 1** | ☐ | Redirecionar Saída | `dup2(fd[1], STDOUT_FILENO)`. |
+| **CMD 1** | ☐ | **FECHAMENTO CRÍTICO** | `close(fd[0])` e `close(fd[1])` (no Filho 1). |
+| **CMD 2** | ☐ | Redirecionar Entrada | `dup2(fd[0], STDIN_FILENO)`. |
+| **CMD 2** | ☐ | Redirecionar Saída | `dup2(outfile_fd, STDOUT_FILENO)`. |
+| **CMD 2** | ☐ | **FECHAMENTO CRÍTICO** | `close(fd[0])` e `close(fd[1])` (no Filho 2). |
+| **Fim** | ☐ | Fechamento Final | `close(fd[0])` e `close(fd[1])` (no Processo Pai). |
+| **Fim** | ☐ | Espera | `waitpid()` para **todos** os processos filhos. |
 
-### 👶 Fase 2: Execução do Primeiro Comando (`cmd1`)
+---
 
-| Status | Tarefa | Detalhe Crucial |
-| :---: | :--- | :--- |
-| ☐ | Criação do Processo | `pid1 = fork()`. |
-| ☐ | **Redirecionar Entrada** | `dup2(infile_fd, STDIN_FILENO)`. |
-| ☐ | **Redirecionar Saída (Pipe)** | `dup2(fd[1], STDOUT_FILENO)`. |
-| ☐ | **FECHAMENTO (Filho 1)** | **`close(fd[0])` e `close(fd[1])`**. |
-| ☐ | Execução | `execve()` para `cmd1`. |
+## IV. 🛠️ Apêndice: Requisitos e Restrições do Projeto
 
-### 🧑 Fase 3: Execução do Segundo Comando (`cmd2`)
+### [cite_start]1. Funções Externas Autorizadas (Mandatory Part) [cite: 89]
 
-| Status | Tarefa | Detalhe Crucial |
-| :---: | :--- | :--- |
-| ☐ | Criação do Processo | `pid2 = fork()`. |
-| ☐ | **Redirecionar Entrada (Pipe)** | `dup2(fd[0], STDIN_FILENO)`. |
-| ☐ | **Redirecionar Saída** | `dup2(outfile_fd, STDOUT_FILENO)`. |
-| ☐ | **FECHAMENTO (Filho 2)** | **`close(fd[0])` e `close(fd[1])`**. |
-| ☐ | Execução | `execve()` para `cmd2`. |
+| Categoria | Funções Autorizadas |
+| :---: | :--- |
+| **I/O e Files** | `open`, `close`, `read`, `write`, `unlink` |
+| **Memória** | `malloc`, `free` |
+| **Processos & Pipes** | `fork`, `pipe`, `execve`, `wait`, `waitpid`, `exit` |
+| **Utilitários** | `perror`, `strerror`, `access`, `dup`, `dup2` |
+| **Output** | `ft_printf` ou qualquer equivalente **codificado por você** |
+| **Biblioteca** | `Libft` (autorizada) |
 
-### 🏁 Fase 4: Conclusão e Limpeza (Processo Pai)
+### 2. Restrições e Requisitos de Implementação
 
-| Status | Tarefa | Detalhe Crucial |
-| :---: | :--- | :--- |
-| ☐ | **FECHAMENTO (Pai)** | **`close(fd[0])` e `close(fd[1])`** (Originals). |
-| ☐ | Aguardar Filhos | `waitpid(pid1, ...)` e `waitpid(pid2, ...)`. |
-| ☐ | Fim do Programa | Retorna o código de saída do `cmd2`. |
+* [cite_start]**Linguagem:** O projeto deve ser escrito em C[cite: 16].
+* [cite_start]**Norminette:** Deve estar em conformidade com a Norm; erros na parte *bonus* resultam em 0[cite: 17, 18].
+* [cite_start]**Comportamento:** Deve comportar-se **exatamente** como o comando *shell*: `< file1 cmd1 | cmd2 > file2`[cite: 95, 96].
+* [cite_start]**Terminação:** O programa deve nunca terminar inesperadamente (ex: *segfault*, *double free*)[cite: 19, 109].
+* [cite_start]**Vazamento de Memória (*Memory Leaks*):** Toda a memória alocada deve ser liberada[cite: 21, 110].
+* [cite_start]**Makefile:** Deve conter as regras `$(NAME)`, `all`, `clean`, `fclean` e `re`[cite: 24, 89].
+
+### 3. Requisitos para o Bônus (Opcional)
+
+[cite_start]A parte bônus **só será avaliada** se a parte obrigatória estiver **PERFEITA** e funcionando sem mau funcionamento[cite: 129, 130, 131].
+
+O bônus permite implementar:
+
+* [cite_start]**Múltiplos Pipes:** Suporte a `$ ./pipex file1 cmd1 cmd2 cmd3 ... cmdn file2`[cite: 116, 118, 119].
+* [cite_start]**Here Doc (`<<`):** Suporte a `$ ./pipex here_doc LIMITER cmd cmd1 file` (equivalente a `cmd << LIMITER | cmd1 >> file`)[cite: 123, 125, 127].
