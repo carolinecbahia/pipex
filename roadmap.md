@@ -93,18 +93,18 @@ Utilize este checklist para garantir a integridade do I/O e a correta manipulaç
 
 ### 2. Restrições e Requisitos de Implementação
 
-* [cite_start]**Linguagem:** O projeto deve ser escrito em C[cite: 16].
-* [cite_start]**Norminette:** Deve estar em conformidade com a Norm; erros na parte *bonus* resultam em 0[cite: 17, 18].
-* [cite_start]**Comportamento:** Deve comportar-se **exatamente** como o comando *shell*: `< file1 cmd1 | cmd2 > file2`[cite: 95, 96].
-* [cite_start]**Terminação:** O programa deve nunca terminar inesperadamente (ex: *segfault*, *double free*)[cite: 19, 109].
-* [cite_start]**Vazamento de Memória (*Memory Leaks*):** Toda a memória alocada deve ser liberada[cite: 21, 110].
-* [cite_start]**Makefile:** Deve conter as regras `$(NAME)`, `all`, `clean`, `fclean` e `re`[cite: 24, 89].
+* **Linguagem:** O projeto deve ser escrito em C.
+* **Norminette:** Deve estar em conformidade com a Norm; erros na parte *bonus* resultam em 0.
+* **Comportamento:** Deve comportar-se **exatamente** como o comando *shell*: `< file1 cmd1 | cmd2 > file2`.
+* **Terminação:** O programa deve nunca terminar inesperadamente (ex: *segfault*, *double free*).
+* **Vazamento de Memória (*Memory Leaks*):** Toda a memória alocada deve ser liberada.
+* **Makefile:** Deve conter as regras `$(NAME)`, `all`, `clean`, `fclean` e `re`.
 
 ### 3. Requisitos para o Bônus (Opcional)
 
-[cite_start]A parte bônus **só será avaliada** se a parte obrigatória estiver **PERFEITA** e funcionando sem mau funcionamento[cite: 129, 130, 131].
+A parte bônus **só será avaliada** se a parte obrigatória estiver **PERFEITA** e funcionando sem mau funcionamento.
 
 O bônus permite implementar:
 
-* [cite_start]**Múltiplos Pipes:** Suporte a `$ ./pipex file1 cmd1 cmd2 cmd3 ... cmdn file2`[cite: 116, 118, 119].
-* [cite_start]**Here Doc (`<<`):** Suporte a `$ ./pipex here_doc LIMITER cmd cmd1 file` (equivalente a `cmd << LIMITER | cmd1 >> file`)[cite: 123, 125, 127].
+* **Múltiplos Pipes:** Suporte a `$ ./pipex file1 cmd1 cmd2 cmd3 ... cmdn file2`.
+* **Here Doc (`<<`):** Suporte a `$ ./pipex here_doc LIMITER cmd cmd1 file` (equivalente a `cmd << LIMITER | cmd1 >> file`).
